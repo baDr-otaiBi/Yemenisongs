@@ -1,5 +1,9 @@
 package com.yemeni.songs.ui.screens
 
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -29,6 +33,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
@@ -45,6 +51,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,6 +61,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -78,6 +86,27 @@ fun SingerDetailScreen(
     val singer = SingersData.getSingerById(singerId) ?: return
     val theme = SingerThemes.getThemeForSinger(singerId)
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val context = LocalContext.current
+
+    // Track which song we're importing for
+    var importingSongId by remember { mutableIntStateOf(-1) }
+    // Counter to force recomposition after import
+    var importVersion by remember { mutableIntStateOf(0) }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null && importingSongId > 0) {
+            val success = musicPlayer.importSong(singerId, importingSongId, uri)
+            if (success) {
+                importVersion++
+                Toast.makeText(context, "تم إضافة الأغنية بنجاح ✓", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "فشل في إضافة الأغنية", Toast.LENGTH_SHORT).show()
+            }
+        }
+        importingSongId = -1
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -116,7 +145,12 @@ fun SingerDetailScreen(
         ) {
             // Singer header card with theme colors
             item {
-                SingerHeaderCard(singer = singer, theme = theme)
+                SingerHeaderCard(
+                    singer = singer,
+                    theme = theme,
+                    savedCount = musicPlayer.songStorage.getSavedSongCount(singerId),
+                    importVersion = importVersion,
+                )
                 Spacer(modifier = Modifier.height(4.dp))
             }
 
@@ -135,6 +169,10 @@ fun SingerDetailScreen(
                 var isVisible by remember { mutableStateOf(false) }
                 val isCurrentSong = musicPlayer.currentSong?.id == song.id &&
                         musicPlayer.currentSinger?.id == singer.id
+                // Check if song has been imported (use importVersion to react to changes)
+                val hasSavedFile = remember(importVersion) {
+                    musicPlayer.songStorage.hasSong(singerId, song.id)
+                }
 
                 LaunchedEffect(Unit) {
                     delay(index * 80L)
@@ -154,7 +192,12 @@ fun SingerDetailScreen(
                         theme = theme,
                         isPlaying = isCurrentSong && musicPlayer.isPlaying,
                         isCurrentSong = isCurrentSong,
-                        onClick = { onSongClick(song, singer, singer.songs, index) }
+                        hasSavedFile = hasSavedFile,
+                        onClick = { onSongClick(song, singer, singer.songs, index) },
+                        onImportClick = {
+                            importingSongId = song.id
+                            filePickerLauncher.launch("audio/*")
+                        },
                     )
                 }
             }
@@ -210,7 +253,12 @@ fun PlayAllButton(theme: SingerTheme, onClick: () -> Unit) {
 }
 
 @Composable
-fun SingerHeaderCard(singer: Singer, theme: SingerTheme) {
+fun SingerHeaderCard(
+    singer: Singer,
+    theme: SingerTheme,
+    savedCount: Int,
+    @Suppress("UNUSED_PARAMETER") importVersion: Int,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -269,17 +317,33 @@ fun SingerHeaderCard(singer: Singer, theme: SingerTheme) {
                         color = Color.White.copy(alpha = 0.8f),
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White.copy(alpha = 0.2f))
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "${singer.songsCount} أغنية",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = theme.accent,
-                        )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.2f))
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "${singer.songsCount} أغنية",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = theme.accent,
+                            )
+                        }
+                        if (savedCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.White.copy(alpha = 0.15f))
+                                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "$savedCount محفوظة",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = Color.White.copy(alpha = 0.9f),
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -294,7 +358,9 @@ fun SongItem(
     theme: SingerTheme,
     isPlaying: Boolean,
     isCurrentSong: Boolean,
+    hasSavedFile: Boolean,
     onClick: () -> Unit,
+    onImportClick: () -> Unit,
 ) {
     val cardBg = if (isCurrentSong)
         theme.primary.copy(alpha = 0.12f)
@@ -354,22 +420,50 @@ fun SongItem(
 
             // Song info
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = song.title,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = if (isCurrentSong) FontWeight.Bold else FontWeight.Medium,
-                    ),
-                    color = if (isCurrentSong) theme.primary
-                    else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = song.title,
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontWeight = if (isCurrentSong) FontWeight.Bold else FontWeight.Medium,
+                        ),
+                        color = if (isCurrentSong) theme.primary
+                        else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (hasSavedFile) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = "محفوظة",
+                            modifier = Modifier.size(16.dp),
+                            tint = Color(0xFF4CAF50),
+                        )
+                    }
+                }
                 if (song.duration.isNotEmpty()) {
                     Text(
-                        text = song.duration,
+                        text = if (hasSavedFile) "${song.duration} • جاهزة للتشغيل"
+                        else song.duration,
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isCurrentSong) theme.primary.copy(alpha = 0.7f)
                         else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            // Import button (if not imported)
+            if (!hasSavedFile) {
+                IconButton(
+                    onClick = onImportClick,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.FileUpload,
+                        contentDescription = "استيراد",
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     )
                 }
             }

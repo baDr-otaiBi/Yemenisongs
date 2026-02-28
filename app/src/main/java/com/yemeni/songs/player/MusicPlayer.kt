@@ -2,6 +2,7 @@ package com.yemeni.songs.player
 
 import android.content.Context
 import android.media.MediaPlayer
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -10,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.yemeni.songs.data.Song
 import com.yemeni.songs.data.Singer
+import com.yemeni.songs.data.SongStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,6 +23,7 @@ class MusicPlayer(private val context: Context) {
     private var mediaPlayer: MediaPlayer? = null
     private var progressJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main)
+    val songStorage = SongStorage(context)
 
     var isPlaying by mutableStateOf(false)
         private set
@@ -52,46 +55,69 @@ class MusicPlayer(private val context: Context) {
         try {
             mediaPlayer?.release()
             mediaPlayer = null
-
-            val rawResId = song.rawResId
-            if (rawResId != 0) {
-                mediaPlayer = MediaPlayer.create(context, rawResId)?.apply {
-                    setOnCompletionListener { playNext() }
-                    setOnPreparedListener {
-                        totalDuration = duration.toLong()
-                        start()
-                        isPlaying = true
-                        startProgressTracking()
-                    }
-                }
-                if (mediaPlayer == null) {
-                    // Resource not found, simulate playback
-                    simulatePlayback(song, singer, playlist, index)
-                    return
-                }
-            } else {
-                simulatePlayback(song, singer, playlist, index)
-                return
-            }
+            progressJob?.cancel()
 
             currentSong = song
             currentSinger = singer
             currentPlaylist = playlist
             currentSongIndex = index
+            progress = 0f
+            currentPosition = 0L
+
+            // Try local file first
+            val localPath = songStorage.getSongPath(singer.id, song.id)
+            if (localPath != null) {
+                playFromFile(localPath)
+                return
+            }
+
+            // Try raw resource
+            val rawResId = song.rawResId
+            if (rawResId != 0) {
+                mediaPlayer = MediaPlayer.create(context, rawResId)
+                if (mediaPlayer != null) {
+                    mediaPlayer!!.setOnCompletionListener { playNext() }
+                    totalDuration = mediaPlayer!!.duration.toLong()
+                    mediaPlayer!!.start()
+                    isPlaying = true
+                    startProgressTracking()
+                    return
+                }
+            }
+
+            // Simulate playback if no audio source
+            isPlaying = true
+            totalDuration = parseDuration(song.duration)
+            startProgressTracking()
         } catch (e: Exception) {
-            simulatePlayback(song, singer, playlist, index)
+            isPlaying = true
+            totalDuration = parseDuration(song.duration)
+            startProgressTracking()
         }
     }
 
-    private fun simulatePlayback(song: Song, singer: Singer, playlist: List<Song>, index: Int) {
-        currentSong = song
-        currentSinger = singer
-        currentPlaylist = playlist
-        currentSongIndex = index
-        isPlaying = true
-        totalDuration = parseDuration(song.duration)
-        currentPosition = 0L
-        startProgressTracking()
+    private fun playFromFile(filePath: String) {
+        try {
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(filePath)
+                prepare()
+                setOnCompletionListener { playNext() }
+                totalDuration = duration.toLong()
+                start()
+            }
+            isPlaying = true
+            startProgressTracking()
+        } catch (e: Exception) {
+            // Fallback to simulation
+            isPlaying = true
+            totalDuration = parseDuration(currentSong?.duration ?: "4:00")
+            startProgressTracking()
+        }
+    }
+
+    fun importSong(singerId: Int, songId: Int, uri: Uri): Boolean {
+        val path = songStorage.saveSong(singerId, songId, uri)
+        return path != null
     }
 
     private fun parseDuration(duration: String): Long {
@@ -101,7 +127,7 @@ class MusicPlayer(private val context: Context) {
             val seconds = parts[1].toLongOrNull() ?: 0
             return (minutes * 60 + seconds) * 1000
         }
-        return 240_000L // default 4 minutes
+        return 240_000L
     }
 
     fun togglePlayPause() {
@@ -149,7 +175,6 @@ class MusicPlayer(private val context: Context) {
                         progress = if (totalDuration > 0) currentPosition.toFloat() / totalDuration else 0f
                     } catch (_: Exception) {}
                 } else {
-                    // Simulated playback
                     if (totalDuration > 0 && currentPosition < totalDuration) {
                         currentPosition += 500
                         progress = currentPosition.toFloat() / totalDuration
