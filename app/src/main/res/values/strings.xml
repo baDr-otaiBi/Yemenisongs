@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">أغاني يمنية بدون نت</string>
+    <string name="splash_title">أغاني يمنية</string>
+    <string name="splash_subtitle">بدون نت</string>
+    <string name="splash_description">استمتع بأجمل الأغاني اليمنية الأصيلة</string>
+    <string name="enter">دخول</string>
+    <string name="singers">الفنانون</string>
+    <string name="songs">الأغاني</string>
+    <string name="no_songs">لا توجد أغاني حالياً</string>
+    <string name="coming_soon">قريباً</string>
+    <string name="back">رجوع</string>
+    <string name="search">بحث</string>
+    <string name="ayoub_tarish">أيوب طارش</string>
+    <string name="abu_bakr_salem">أبو بكر سالم</string>
+    <string name="faisal_alawi">فيصل علوي</string>
+    <string name="mohammed_hamoud">محمد حمود الحارثي</string>
+    <string name="ali_bin_ali">علي بن علي الآنسي</string>
+</resources>
