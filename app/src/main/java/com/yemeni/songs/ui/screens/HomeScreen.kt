@@ -51,8 +51,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yemeni.songs.data.Singer
+import com.yemeni.songs.data.SingerThemes
 import com.yemeni.songs.data.SingersData
-import com.yemeni.songs.ui.theme.GoldAccent
 import com.yemeni.songs.ui.theme.PrimaryGreen
 import com.yemeni.songs.ui.theme.WarmGold
 import kotlinx.coroutines.delay
@@ -169,7 +169,7 @@ fun HomeScreen(
                 }
             }
 
-            // Singers list
+            // Singers list with themed cards
             itemsIndexed(SingersData.singers) { index, singer ->
                 var isVisible by remember { mutableStateOf(false) }
 
@@ -192,9 +192,9 @@ fun HomeScreen(
                 }
             }
 
-            // Bottom spacer
+            // Bottom spacer for mini player
             item {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(80.dp))
             }
         }
     }
@@ -205,6 +205,8 @@ fun SingerCard(
     singer: Singer,
     onClick: () -> Unit
 ) {
+    val theme = SingerThemes.getThemeForSinger(singer.id)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -213,9 +215,7 @@ fun SingerCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp,
-        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Row(
             modifier = Modifier
@@ -223,7 +223,7 @@ fun SingerCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Avatar with emoji
+            // Avatar with singer theme gradient
             Box(
                 modifier = Modifier
                     .size(60.dp)
@@ -231,8 +231,8 @@ fun SingerCard(
                     .background(
                         Brush.linearGradient(
                             colors = listOf(
-                                MaterialTheme.colorScheme.primaryContainer,
-                                MaterialTheme.colorScheme.secondaryContainer,
+                                theme.gradientStart,
+                                theme.gradientEnd,
                             )
                         )
                     ),
@@ -267,22 +267,22 @@ fun SingerCard(
                 Text(
                     text = "${singer.songsCount} أغنية",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = theme.primary,
                 )
             }
 
-            // Arrow indicator
+            // Themed arrow indicator
             Box(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                    .background(theme.primary.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "◀",
                     fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = theme.primary,
                     textAlign = TextAlign.Center,
                 )
             }

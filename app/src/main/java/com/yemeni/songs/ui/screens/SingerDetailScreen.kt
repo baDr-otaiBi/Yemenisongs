@@ -1,10 +1,16 @@
 package com.yemeni.songs.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +29,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -48,22 +56,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yemeni.songs.data.Singer
+import com.yemeni.songs.data.SingerTheme
+import com.yemeni.songs.data.SingerThemes
 import com.yemeni.songs.data.SingersData
 import com.yemeni.songs.data.Song
-import com.yemeni.songs.ui.theme.PrimaryGreen
-import com.yemeni.songs.ui.theme.WarmGold
+import com.yemeni.songs.player.MusicPlayer
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SingerDetailScreen(
     singerId: Int,
-    onBackClick: () -> Unit
+    musicPlayer: MusicPlayer,
+    onBackClick: () -> Unit,
+    onSongClick: (Song, Singer, List<Song>, Int) -> Unit,
 ) {
     val singer = SingersData.getSingerById(singerId) ?: return
+    val theme = SingerThemes.getThemeForSinger(singerId)
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -91,7 +104,8 @@ fun SingerDetailScreen(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
@@ -100,15 +114,27 @@ fun SingerDetailScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Singer header card
+            // Singer header card with theme colors
             item {
-                SingerHeaderCard(singer = singer)
-                Spacer(modifier = Modifier.height(8.dp))
+                SingerHeaderCard(singer = singer, theme = theme)
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Play all button
+            item {
+                PlayAllButton(theme = theme) {
+                    if (singer.songs.isNotEmpty()) {
+                        onSongClick(singer.songs[0], singer, singer.songs, 0)
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
             }
 
             // Songs list
             itemsIndexed(singer.songs) { index, song ->
                 var isVisible by remember { mutableStateOf(false) }
+                val isCurrentSong = musicPlayer.currentSong?.id == song.id &&
+                        musicPlayer.currentSinger?.id == singer.id
 
                 LaunchedEffect(Unit) {
                     delay(index * 80L)
@@ -125,20 +151,66 @@ fun SingerDetailScreen(
                     SongItem(
                         song = song,
                         index = index + 1,
+                        theme = theme,
+                        isPlaying = isCurrentSong && musicPlayer.isPlaying,
+                        isCurrentSong = isCurrentSong,
+                        onClick = { onSongClick(song, singer, singer.songs, index) }
                     )
                 }
             }
 
-            // Bottom spacer
+            // Bottom spacer for mini player
             item {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(80.dp))
             }
         }
     }
 }
 
 @Composable
-fun SingerHeaderCard(singer: Singer) {
+fun PlayAllButton(theme: SingerTheme, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = theme.cardBackground),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(theme.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = "تشغيل الكل",
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = "تشغيل الكل",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = theme.primary,
+            )
+        }
+    }
+}
+
+@Composable
+fun SingerHeaderCard(singer: Singer, theme: SingerTheme) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -150,8 +222,8 @@ fun SingerHeaderCard(singer: Singer) {
                 .background(
                     Brush.horizontalGradient(
                         colors = listOf(
-                            PrimaryGreen,
-                            PrimaryGreen.copy(alpha = 0.8f),
+                            theme.gradientStart,
+                            theme.gradientEnd,
                         )
                     )
                 )
@@ -166,7 +238,10 @@ fun SingerHeaderCard(singer: Singer) {
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
-                                colors = listOf(WarmGold, WarmGold.copy(alpha = 0.6f))
+                                colors = listOf(
+                                    theme.accent,
+                                    theme.accent.copy(alpha = 0.6f),
+                                )
                             )
                         ),
                     contentAlignment = Alignment.Center
@@ -203,7 +278,7 @@ fun SingerHeaderCard(singer: Singer) {
                         Text(
                             text = "${singer.songsCount} أغنية",
                             style = MaterialTheme.typography.labelLarge,
-                            color = WarmGold,
+                            color = theme.accent,
                         )
                     }
                 }
@@ -216,14 +291,25 @@ fun SingerHeaderCard(singer: Singer) {
 fun SongItem(
     song: Song,
     index: Int,
+    theme: SingerTheme,
+    isPlaying: Boolean,
+    isCurrentSong: Boolean,
+    onClick: () -> Unit,
 ) {
+    val cardBg = if (isCurrentSong)
+        theme.primary.copy(alpha = 0.12f)
+    else
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isCurrentSong) 4.dp else 1.dp
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Row(
             modifier = Modifier
@@ -231,22 +317,37 @@ fun SongItem(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Song number
+            // Song number / playing indicator
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(42.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                    .background(
+                        if (isCurrentSong)
+                            Brush.linearGradient(listOf(theme.primary, theme.gradientEnd))
+                        else
+                            Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                )
+                            )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "$index",
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                    ),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    textAlign = TextAlign.Center,
-                )
+                if (isPlaying) {
+                    MiniSongWave(color = Color.White)
+                } else {
+                    Text(
+                        text = "$index",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = if (isCurrentSong) Color.White
+                        else MaterialTheme.colorScheme.onPrimaryContainer,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -256,25 +357,72 @@ fun SongItem(
                 Text(
                     text = song.title,
                     style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = if (isCurrentSong) FontWeight.Bold else FontWeight.Medium,
                     ),
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = if (isCurrentSong) theme.primary
+                    else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 if (song.duration.isNotEmpty()) {
                     Text(
                         text = song.duration,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (isCurrentSong) theme.primary.copy(alpha = 0.7f)
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
-            // Play icon
-            Icon(
-                imageVector = Icons.Filled.PlayCircle,
-                contentDescription = "تشغيل",
-                modifier = Modifier.size(36.dp),
-                tint = MaterialTheme.colorScheme.primary,
+            // Play/Pause icon
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isCurrentSong) theme.accent.copy(alpha = 0.2f)
+                        else Color.Transparent
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayCircle,
+                    contentDescription = "تشغيل",
+                    modifier = Modifier.size(if (isPlaying) 24.dp else 32.dp),
+                    tint = if (isCurrentSong) theme.primary
+                    else MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MiniSongWave(color: Color) {
+    val infiniteTransition = rememberInfiniteTransition(label = "songWave")
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (i in 0..2) {
+            val height by infiniteTransition.animateFloat(
+                initialValue = 4f,
+                targetValue = 16f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(
+                        durationMillis = 350 + (i * 120),
+                        easing = FastOutSlowInEasing,
+                    ),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "songBar_$i"
+            )
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(height.dp)
+                    .clip(RoundedCornerShape(1.5.dp))
+                    .background(color)
             )
         }
     }
